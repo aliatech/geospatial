@@ -18,8 +18,8 @@ export class MapRenderer extends Component {
         this.orm = useService("orm");
         this.action = useService("action");
         this.mapRef = useRef("mapContainer");
-        this.leafletTileUrl = session["leaflet.tile_url"];
-        this.leafletCopyright = session["leaflet.copyright"];
+        this.leafletTileUrl = session["leaflet.tile_url"] || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+        this.leafletCopyright = session["leaflet.copyright"] || "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors";
 
         const archAttrs = this.props.archInfo.arch.attributes;
 
@@ -70,15 +70,14 @@ export class MapRenderer extends Component {
         const fields = this.getFields();
 
         try {
-            // Cargar registros usando searchRead
             const records = await this.orm.searchRead(
                 this.resModel,
-                this.props.domain || [],
+                [[this.fieldLatitude, "!=", false], [this.fieldLongitude, "!=", false]],
                 fields,
                 {
-                    limit: this.props.limit || 80,
+                    //limit: this.props.limit,
                     context: this.props.context || {},
-                }
+                },
             );
             this.records = records;
         } catch (error) {
@@ -117,8 +116,13 @@ export class MapRenderer extends Component {
         const result = await this.orm.call(
             "res.users",
             "get_default_leaflet_position",
-            [this.props.resModel]
+            [this.props.resModel],
         );
+        if (!result || !result.lat || !result.lng) {
+            console.error("Invalid default position received from server");
+            this.defaultLatLng = L.latLng(0, 0);
+            return;
+        }
         this.defaultLatLng = L.latLng(result.lat, result.lng);
     }
 
@@ -164,7 +168,11 @@ export class MapRenderer extends Component {
             }
         }
 
-        this.leafletMap.fitBounds(this.leafletFeatureGroup.getBounds().pad(0.1));
+        try {
+            this.leafletMap.fitBounds(this.leafletFeatureGroup.getBounds().pad(0.1));
+        } catch (e) {
+            console.warn("Could not fit map bounds:");
+        }
     }
 
     /**
